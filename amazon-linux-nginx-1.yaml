@@ -1,0 +1,169 @@
+---
+# This YAML is written with the help of the same YAML script discussed in CIS.4083 Week 4 online lecture.
+# Citing references for NGINX server on AMAZON LINUX instance 
+Description: Assignment setup for an NGINX server on Amazon Linux EC2 Instance
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Enabling SSH access to the AMAZON LINUX server using existing keypair
+
+  SSHCIDR:
+    Type: String
+    Description: The CIDR block restricting SSH
+    MinLength: 9 
+    Default: 131.247.0.0/16
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x
+    
+Mappings:
+  Region2AMI:
+    us-east-1:  
+      AMI:  ami-00eb20669e0990cb4
+    us-east-2:  
+      AMI:  ami-0c64dd618a49aeee8
+    us-west-1:
+      AMI:  ami-0bce08e823ed38bdd
+    us-west-2:
+      AMI:  ami-08d489468314a58df
+    ap-east-1:
+      AMI:  ami-f8ee9589
+    ap-south-1:
+      AMI:  ami-02913db388613c3e1
+    ap-northeast-2:
+      AMI:  ami-0e1e385b0a934254a
+    ap-southeast-1:
+      AMI:  ami-05c859630889c79c8
+    ap-southeast-2:
+      AMI:  ami-07cc15c3ba6f8e287
+    ap-northeast-1:
+      AMI:  ami-0ab3e16f9c414dee7
+    ca-central-1:
+      AMI:  ami-04070f04f450607dc
+    eu-central-1:
+      AMI:  ami-010fae13a16763bb4
+    eu-west-1:
+      AMI:  ami-028188d9b49b32a80
+    eu-west-2:
+      AMI:  ami-04de2b60dd25fbb2e
+    eu-west-3:
+      AMI:  ami-0652eb0db9b20aeaf
+    eu-north-1:
+      AMI:  ami-6a1f9414
+    me-south-1:
+      AMI:  ami-07a246cb94128dd8f
+    sa-east-1:
+      AMI:  ami-0e2c2c29d8017dd99
+
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              nginx:  []
+              
+          files:
+            /var/www/html/index.html:
+              content: !
+                  <html>
+                  <title>Vignesh Ashok Kumar</title>
+                  <body>
+                  <h1>Vignesh Ashok Kumar</h1>
+                  </body>
+                  </html>
+              mode: '000644'
+              owner: root
+              group: root
+              
+            /etc/nginx/nginx.conf:
+              content: !
+                  events { }
+                  http {
+                      server{
+                  root /var/www/html;
+                  location / {root   /var/www/html;index  index.php index.html index.htm;}
+                      }
+                  }
+              mode: '000644'
+              owner: root
+              group: root
+              
+            /etc/cfn/cfn-hup.conf:
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=1
+              mode: '000400'
+              owner: root
+              group: root
+              
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+
+          services:
+            sysvinit:
+              nginx:
+                enabled: 'true'
+                ensureRunning: 'true'
+              cfn-hup:
+                enabled: 'true'
+                ensureRunnig: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+                  
+    
+    Properties:
+      ImageId: !FindInMap [Region2AMI, !Ref 'AWS::Region', 'AMI']
+      InstanceType: t2.micro
+      SecurityGroups: 
+      - !Ref WebServerSecurityGroup
+      Tags: 
+      - Key: Name
+        Value: AMAZON LINUX RUNNING NGINX WEB SERVER
+      KeyName: !Ref KeyName
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -x
+          yum update -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackId} --resource EC2Instance --region ${AWS::Region}
+          service nginx restart;
+          
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allows HTTP
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      - CidrIp: !Ref SSHCIDR
+        FromPort: 22
+        ToPort: 22
+        IpProtocol: tcp
+      
+  
+Outputs:
+  WebURL:
+    Description: The URL for the web page
+    Value: !Sub 'http://${EC2Instance.PublicIp}/index.html'
+  PublicDNS:
+    Description: The AWS public DNS name for our instance
+    Value: !Sub ${EC2Instance.PublicDnsName}
+
+
+  
