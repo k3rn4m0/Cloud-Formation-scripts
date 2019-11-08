@@ -1,0 +1,65 @@
+---
+# This YAML is written with the help of the same YAML script discussed in CIS.4083 Week 2 online lecture.
+
+# Citing references for NGINX server installation steps: 
+# https://www.digitalocean.com/community/tutorials/how-to-install-nginx-on-ubuntu-18-04
+Description: Assignment setup for an NGINX server on Ubuntu 18.04 distribution
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Enabling SSH access to the Ubuntu 18.04 server using existing keypair
+
+  SSHUBUNTU:
+    Type: String
+    Description: The CIDR block restricting SSH
+    MinLength: 9 
+    Default: 131.247.0.0/16
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-07d0cf3af28718ef8
+      InstanceType: t2.micro
+      SecurityGroups: 
+      - !Ref WebServerSecurityGroup
+      Tags: 
+      - Key: Name
+        Value: UBUNTU 18.04 NGINX WEB SERVER
+      KeyName: !Ref KeyName
+      UserData:
+        'Fn::Base64': !Sub |
+          #!/bin/bash -x
+          apt-get update -y && apt-get upgrade -y
+          apt-get install nginx -y
+          systemctl start nginx
+          systemctl enable nginx
+          cd /var/www/html/
+          touch index.html
+          echo "<h1>Vignesh Ashok Kumar<br>AWS Region - ${AWS::Region}</h1><title>Vignesh Ashok Kumar</title>" > index.html
+          
+          
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allows HTTP
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 80
+        ToPort: 80
+        IpProtocol: tcp
+      - CidrIp: !Ref SSHUBUNTU
+        FromPort: 22
+        ToPort: 22
+        IpProtocol: tcp
+      
+  
+Outputs:
+  WebURL:
+    Description: The URL for the web page
+    Value: !Sub 'http://${EC2Instance.PublicIp}/index.html'
+
+
+
+  
